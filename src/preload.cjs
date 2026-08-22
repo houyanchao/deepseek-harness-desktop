@@ -15,6 +15,9 @@ window.addEventListener('DOMContentLoaded', () => {
   })
   ipcRenderer.on('updates:applied', () => button.classList.remove('show'))
 
+  document.getElementById('github')
+    .addEventListener('click', () => ipcRenderer.send('shell:open-github'))
+
   const version = document.getElementById('version')
   version.addEventListener('click', () => ipcRenderer.send('versions:open'))
   ipcRenderer.on('versions:current', (_event, info) => {

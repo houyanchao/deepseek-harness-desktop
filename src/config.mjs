@@ -31,6 +31,9 @@ export const UPDATE_MANIFEST_URL = process.env.DSH_DESKTOP_MANIFEST
  */
 export const REGISTRY = process.env.DSH_DESKTOP_REGISTRY ?? 'https://registry.npmmirror.com'
 
+/** The project repository, linked from the header's GitHub button. */
+export const REPO_URL = 'https://github.com/houyanchao/deepseek-harness-desktop'
+
 /** Fixed userData directory name, decoupled from the display name on purpose. */
 export const USER_DATA_DIR_NAME = 'dsh-desktop'
 

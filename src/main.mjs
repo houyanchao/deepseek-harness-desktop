@@ -1,7 +1,7 @@
 /** Entry: single instance, first-boot prep, dsh supervision, window lifecycle. */
 
-import { app, dialog } from 'electron'
-import { USER_DATA_DIR_NAME } from './config.mjs'
+import { app, dialog, ipcMain, shell } from 'electron'
+import { REPO_URL, USER_DATA_DIR_NAME } from './config.mjs'
 import { ensureDsh, pinUserDataDir, prepareHome, preinstallPlugins } from './bootstrap.mjs'
 import { dshLogPath, startDshServer } from './dsh-server.mjs'
 import { installAppMenu } from './menu.mjs'
@@ -51,6 +51,7 @@ function run() {
 
 async function boot() {
   installAppMenu()
+  ipcMain.on('shell:open-github', () => void shell.openExternal(REPO_URL))
   const splash = createSplash()
   try {
     await prepareHome()
