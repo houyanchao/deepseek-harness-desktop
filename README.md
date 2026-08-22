@@ -17,7 +17,7 @@
 
 从 [Releases](https://github.com/houyanchao/deepseek-harness-desktop/releases) 下载对应平台的安装包：
 
-- macOS（Apple Silicon）：`DSH-<version>-arm64.dmg`
+- macOS（Apple Silicon）：`DSH Desktop-<version>-arm64.dmg`
 - Windows：`DSH-Setup.exe`
 
 首次启动需要网络（下载 DSH 本体）；之后离线可用。

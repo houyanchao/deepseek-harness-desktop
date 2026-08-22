@@ -1,6 +1,6 @@
 # macOS 打包指南
 
-产物：`DSH-<version>-arm64.dmg`（分发安装用）+ `out/make/zip/darwin/` 下的 zip（自动更新 feed 用）。
+产物：`DSH Desktop-<version>-arm64.dmg`（分发安装用）+ `out/make/zip/darwin/` 下的 zip（自动更新 feed 用）。
 
 ## 环境要求
 
@@ -48,7 +48,7 @@ pnpm run build-icons   # 依赖 sips/iconutil，仅 macOS 可跑
 `forge.config.mjs` 的 `packagerConfig` 里留有 TODO。未签名的影响：
 
 - 其他机器首次打开会被 Gatekeeper 拦截。绕过方式：右键 → 打开，
-  或 `xattr -cr /Applications/DSH.app`。
+  或 `xattr -cr "/Applications/DSH Desktop.app"`。
 - **mac 自动更新（Squirrel.Mac）硬性要求已签名**，未签名时壳子的 shell
   更新通道自动回退为「弹框引导手动下载」，其余功能不受影响。
 

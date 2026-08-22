@@ -11,12 +11,12 @@ if (!existsSync(path.join(RUNTIME_DIR, 'manifest.json'))) {
 
 export default {
   packagerConfig: {
-    name: 'DSH',
+    name: 'DSH Desktop',
     // Also the binary name: packager derives CFBundleDisplayName (Dock
     // tooltip, Force Quit list) from it, so it must not stay internal-looking.
     // The userData directory is pinned separately (config.mjs), so renaming
     // never orphans existing user data.
-    executableName: 'DSH',
+    executableName: 'DSH Desktop',
     appBundleId: 'com.dsh-desktop.app',
     // Extension-less on purpose: packager appends .icns / .ico per platform.
     // Regenerate both from assets/icon.svg via `pnpm run build-icons`.
@@ -39,6 +39,8 @@ export default {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
       config: {
+        // Squirrel.Windows package ids must not contain spaces.
+        name: 'DSHDesktop',
         setupExe: 'DSH-Setup.exe',
         setupIcon: path.join(ROOT, 'assets', 'icon.ico'),
       },
