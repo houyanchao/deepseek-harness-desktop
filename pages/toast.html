@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+  }
+  body {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 92%;
+    padding: 9px 16px;
+    border-radius: 10px;
+    background: rgba(15, 17, 21, 0.92);
+    color: #ffffff;
+    font: 400 12px -apple-system, "Segoe UI", sans-serif;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+    animation: pop-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both, fade-out 0.35s ease-in 2.1s forwards;
+  }
+  .toast svg { flex: none; }
+  .toast span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-14px) scale(0.94); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-out {
+    to { opacity: 0; transform: translateY(-8px); }
+  }
+</style>
+</head>
+<body>
+  <div class="toast">
+    <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="#34c759"/><path d="M4 7.2 6.2 9.4 10 5" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span id="msg"></span>
+  </div>
+  <script>
+    document.getElementById('msg').textContent = new URLSearchParams(location.search).get('message') ?? ''
+  </script>
+</body>
+</html>

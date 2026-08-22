@@ -1,0 +1,40 @@
+{
+  "name": "dsh-desktop",
+  "productName": "DSH",
+  "version": "0.1.0",
+  "description": "Desktop client for DeepSeek Harness (DSH): bundles Node + pnpm, zero configuration, with effortless switching between DSH versions.",
+  "license": "GPL-3.0-only",
+  "author": "houyanchao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/houyanchao/deepseek-harness-desktop.git"
+  },
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "bundle-runtime": "node scripts/bundle-runtime.mjs",
+    "build-icons": "node scripts/build-icons.mjs",
+    "smoke": "node scripts/smoke-runtime.mjs",
+    "test-manifest": "node scripts/test-manifest.mjs",
+    "test-plugins": "node scripts/test-plugins.mjs",
+    "check": "node --check src/main.mjs && node --check src/config.mjs && node --check src/paths.mjs && node --check src/runtime.mjs && node --check src/bootstrap.mjs && node --check src/plugins.mjs && node --check src/dsh-install.mjs && node --check src/dsh-server.mjs && node --check src/windows.mjs && node --check src/menu.mjs && node --check src/updates.mjs && node --check src/update-manifest.mjs && node --check src/shell-updater.mjs && node --check src/versions.mjs && node --check src/preload.cjs && node --check src/versions-preload.cjs && node --check scripts/serve-test-manifest.mjs && node --check scripts/bundle-runtime.mjs && node --check scripts/smoke-runtime.mjs && node --check scripts/build-icons.mjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "macos-alias",
+      "fs-xattr"
+    ]
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.10.2",
+    "@electron-forge/maker-dmg": "^7.10.2",
+    "@electron-forge/maker-squirrel": "^7.10.2",
+    "@electron-forge/maker-zip": "^7.10.2",
+    "electron": "^38.4.0"
+  }
+}

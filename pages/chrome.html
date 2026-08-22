@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #ffffff;
+    font: 500 12px -apple-system, "Segoe UI", sans-serif;
+    user-select: none;
+  }
+  /*
+   * The permanent header, native-title-bar height. The drag region must be
+   * ONLY this strip: window drag regions are handled natively at window
+   * level, so a full-page region would swallow clicks meant for the dsh
+   * view layered above the rest of this page.
+   */
+  .bar {
+    box-sizing: border-box;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 0 12px;
+    border-bottom: 1px solid #ececec;
+    -webkit-app-region: drag;
+  }
+  /* mac: room for the inset traffic lights (ending near x=84) plus a 10px gap. */
+  body[data-platform="darwin"] .bar { padding-left: 94px; }
+  /* Colors follow dsh's primary button: neutral-bluish-1000 fill, 750 hover. */
+  #update {
+    display: none;
+    align-items: center;
+    padding: 1px 10px;
+    border-radius: 999px;
+    border: none;
+    background: rgb(15, 17, 21);
+    color: #ffffff;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 16px;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+  #update.show { display: inline-flex; }
+  #update:hover { background: rgb(67, 69, 74); }
+  /* Version switcher: ghost pill; the dropdown itself is a native menu. */
+  #version {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: rgb(100, 103, 112);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 16px;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+  #version.show { display: inline-flex; }
+  #version:hover { background: rgba(15, 17, 21, 0.07); color: rgb(15, 17, 21); }
+  #version::after { content: "▾"; font-size: 8px; opacity: 0.7; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button id="version"></button>
+    <button id="update">更新</button>
+  </div>
+  <script>
+    document.body.dataset.platform = new URLSearchParams(location.search).get('platform') ?? ''
+  </script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --ink: rgb(15, 17, 21);
+    --ink-2: rgb(88, 92, 100);
+    --ink-3: rgb(146, 150, 158);
+    --line: #e6e8ec;
+    --card: #ffffff;
+    --canvas: #f5f6f8;
+  }
+  html, body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font: 400 12px/1.45 -apple-system, "Segoe UI", sans-serif;
+    user-select: none;
+  }
+  /* Reserve the scrollbar gutter: re-rendering the list must not shift it. */
+  html { scrollbar-gutter: stable; }
+  body { padding-bottom: 76px; }
+
+  /* Summary header: stays put while the list scrolls under it. */
+  #head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 13px 16px 11px;
+    background: rgba(245, 246, 248, 0.86);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  #head-current { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #head-current .dim { margin-right: 7px; color: var(--ink-3); font-weight: 400; }
+
+  #notice {
+    display: none;
+    margin: 12px 14px 0;
+    padding: 8px 11px;
+    border-radius: 8px;
+    background: #fff8e8;
+    border: 1px solid #f2e2bd;
+    color: #8a5b00;
+    font-size: 11px;
+  }
+  #notice.show { display: block; }
+
+  #list { padding: 12px 14px 4px; }
+  .loading {
+    padding: 28px 0;
+    color: var(--ink-3);
+    text-align: center;
+  }
+
+  /* One card per version. */
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    padding: 11px 12px 11px 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 17, 21, 0.03);
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+    animation: row-in 0.24s ease-out both;
+  }
+  .row:hover {
+    border-color: #d3d7dd;
+    box-shadow: 0 2px 8px rgba(15, 17, 21, 0.06);
+  }
+  /* The version in use, and the one being switched to, get an accent edge. */
+  .row.is-current { border-color: #d8dbe1; }
+  .row.is-current::before,
+  .row.switching-target::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 12px;
+    bottom: 12px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--ink);
+  }
+  .row.switching-target {
+    border-color: #c9ced6;
+    background: #fbfbfc;
+  }
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: none; }
+  }
+  /* Refreshes reuse the same markup: replaying the entrance on every push
+   * reads as the whole list flinching, so it is opted out of. */
+  .row.no-anim { animation: none; }
+  /* Removal: the card collapses out before the refreshed list arrives. */
+  .row.removing {
+    overflow: hidden;
+    pointer-events: none;
+    animation: row-out 0.24s ease-in forwards;
+  }
+  @keyframes row-out {
+    from { opacity: 1; max-height: 90px; }
+    to {
+      opacity: 0;
+      max-height: 0;
+      margin-bottom: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      border-width: 0;
+      transform: translateX(-10px);
+    }
+  }
+
+  .info { flex: 1; min-width: 0; }
+  .line1 { display: flex; align-items: center; gap: 7px; }
+  .version {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge {
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 15px;
+    white-space: nowrap;
+  }
+  .badge.current { background: var(--ink); color: #ffffff; }
+  .badge.installed {
+    background: #f1f3f5;
+    border: 1px solid #e4e7eb;
+    color: var(--ink-2);
+    line-height: 13px;
+  }
+  .meta {
+    margin-top: 4px;
+    color: var(--ink-3);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions { display: flex; flex: none; align-items: center; gap: 4px; }
+  .row button {
+    flex: none;
+    height: 24px;
+    padding: 0 13px;
+    border-radius: 999px;
+    border: none;
+    background: var(--ink);
+    color: #ffffff;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.06s;
+  }
+  .row button:hover { background: rgb(58, 61, 67); }
+  .row button:active { transform: scale(0.96); }
+  .row button:disabled {
+    background: transparent;
+    color: var(--ink-3);
+    cursor: default;
+    transform: none;
+  }
+  /* The running version reads as a healthy state, not as a dead button. */
+  .row.is-current button:disabled { color: rgb(18, 140, 76); font-weight: 500; }
+  /* Destructive secondary action: quiet until hovered. */
+  .row button.ghost {
+    padding: 0 10px;
+    background: transparent;
+    color: var(--ink-3);
+  }
+  .row button.ghost:hover { background: #fdeceb; color: #c73a2e; }
+  .row button.ghost:disabled { background: transparent; color: #ccd0d6; }
+
+  /* Loading skeleton, replaced by real cards when the catalog arrives. */
+  .skeleton { pointer-events: none; }
+  .skeleton .bar {
+    height: 10px;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #eff1f3 25%, #e4e7ea 37%, #eff1f3 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.2s ease infinite;
+  }
+  @keyframes shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+  }
+  .skeleton .bar.w1 { width: 92px; height: 12px; }
+  .skeleton .bar.w2 { width: 176px; margin-top: 9px; }
+  .skeleton .bar.w3 { width: 58px; height: 24px; border-radius: 999px; }
+
+  /* Switch-progress footer, fed by the main process during a switch. */
+  #progress {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    padding: 11px 16px 14px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  #progress.show { display: block; animation: rise 0.24s ease-out; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: none; }
+  }
+  #progress-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--ink-2);
+    font-size: 11px;
+  }
+  .spinner {
+    width: 11px;
+    height: 11px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid #e3e5e8;
+    border-top-color: var(--ink);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .track {
+    height: 4px;
+    border-radius: 999px;
+    background: #e9ebee;
+    overflow: hidden;
+  }
+  #progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: var(--ink);
+    transition: width 0.3s;
+  }
+  #progress-fill.indeterminate {
+    width: 30%;
+    transition: none;
+    background: linear-gradient(90deg, rgb(88, 92, 100), var(--ink), rgb(88, 92, 100));
+    animation: slide 1.2s linear infinite;
+  }
+  @keyframes slide {
+    from { margin-left: -30%; }
+    to { margin-left: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div id="head">
+    <span id="head-current"></span>
+  </div>
+  <div id="notice"></div>
+  <div id="list">
+    <div class="row skeleton"><div class="info"><div class="bar w1"></div><div class="bar w2"></div></div><div class="bar w3"></div></div>
+    <div class="row skeleton"><div class="info"><div class="bar w1"></div><div class="bar w2"></div></div><div class="bar w3"></div></div>
+    <div class="row skeleton"><div class="info"><div class="bar w1"></div><div class="bar w2"></div></div><div class="bar w3"></div></div>
+  </div>
+  <div id="progress">
+    <div id="progress-label"><span class="spinner"></span><span id="progress-text"></span></div>
+    <div class="track"><div id="progress-fill"></div></div>
+  </div>
+</body>
+</html>
