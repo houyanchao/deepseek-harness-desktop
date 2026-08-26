@@ -15,8 +15,9 @@
  */
 
 import { spawn } from 'node:child_process'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DETACHED, killTree } from './child.mjs'
 
 /** Give up on a plugin after this many failed attempts (transient net errors). */
 export const MAX_ATTEMPTS = 3
@@ -60,9 +61,21 @@ export async function readPreinstallState(statePath) {
   }
 }
 
-/** Persist the bookkeeping; best-effort, a write failure only costs a retry. */
+/**
+ * Persist the bookkeeping; best-effort, a write failure only costs a retry.
+ * Written to a sibling temp file and renamed over the target: a crash (or a
+ * force-quit mid-install) must not leave truncated JSON behind, which would
+ * read as "nothing attempted" and re-run every preinstall.
+ */
 export async function writePreinstallState(statePath, state) {
-  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`).catch(() => {})
+  const temp = `${statePath}.tmp`
+  try {
+    await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`)
+    await rename(temp, statePath)
+  } catch {
+    // Best-effort by contract, but a failed rename would strand the temp file.
+    await rm(temp, { force: true }).catch(() => {})
+  }
 }
 
 /**
@@ -108,10 +121,12 @@ export function installPlugin({ nodeBinPath, dshEntryPath, profile, spec, env, o
     // Same trust posture as the dsh install itself: pnpm 10+ blocks lifecycle
     // scripts by default, which would silently break plugins that need them.
     const args = [dshEntryPath, 'plugin', '--profile', profile, 'add', spec, '--dangerously-allow-all-builds']
-    const child = spawn(nodeBinPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    // Own process group: dsh shells out to pnpm, so the timeout below has to
+    // reach a grandchild to actually stop the install.
+    const child = spawn(nodeBinPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'], detached: DETACHED })
     const timer = setTimeout(() => {
       onOutput?.(`\n[timeout] ${spec} 安装超过 ${INSTALL_TIMEOUT_MS / 1000}s，已终止\n`)
-      child.kill('SIGKILL')
+      killTree(child, 'SIGKILL')
     }, INSTALL_TIMEOUT_MS)
     const forward = (chunk) => onOutput?.(String(chunk))
     child.stdout.on('data', forward)

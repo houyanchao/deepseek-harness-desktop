@@ -69,13 +69,22 @@ function buildRow(entry, current, estimate, index, animate, port) {
   }
   const button = document.createElement('button')
   if (entry.version === current) {
+    button.className = 'status'
     button.textContent = port === null ? '启用中' : `启用中，端口号${port}`
     button.disabled = true
+    actions.append(button)
+    // Recovering from a wedged dsh child without switching versions.
+    const restart = document.createElement('button')
+    restart.className = 'subtle'
+    restart.textContent = '重启'
+    restart.title = '重启当前版本，插件、工作区和会话数据不受影响'
+    restart.addEventListener('click', () => ipcRenderer.send('versions:restart'))
+    actions.append(restart)
   } else {
     button.textContent = entry.installed ? '切换' : '下载并切换'
     button.addEventListener('click', () => ipcRenderer.send('versions:switch', entry.version))
+    actions.append(button)
   }
-  actions.append(button)
   row.append(actions)
   return row
 }
@@ -128,7 +137,7 @@ ipcRenderer.on('versions:progress', (_event, progress) => {
   const text = document.getElementById('progress-text')
   const fill = document.getElementById('progress-fill')
 
-  if (progress.phase === 'download' || progress.phase === 'starting') {
+  if (progress.phase === 'download' || progress.phase === 'starting' || progress.phase === 'restarting') {
     for (const button of document.querySelectorAll('.row button')) button.disabled = true
     for (const row of document.querySelectorAll('.row')) {
       row.classList.toggle('switching-target', row.dataset.version === progress.version)
@@ -143,7 +152,9 @@ ipcRenderer.on('versions:progress', (_event, progress) => {
       text.textContent = `正在下载安装 DeepSeek Harness ${progress.version}…`
     } else {
       fill.classList.add('indeterminate')
-      text.textContent = `正在启动 DeepSeek Harness ${progress.version}…`
+      text.textContent = progress.phase === 'restarting'
+        ? `正在重启 DeepSeek Harness ${progress.version}…`
+        : `正在启动 DeepSeek Harness ${progress.version}…`
     }
     return
   }
@@ -155,4 +166,9 @@ ipcRenderer.on('versions:progress', (_event, progress) => {
   fill.style.width = '0%'
   box.classList.remove('show')
   for (const row of document.querySelectorAll('.row')) row.classList.remove('switching-target')
+})
+
+// The window is frameless: this page's own close button is the only way out.
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('close').addEventListener('click', () => window.close())
 })

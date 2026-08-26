@@ -24,7 +24,7 @@ async function resolvePlan() {
   const dshVersion = activeDshVersion()
   if (UPDATE_MANIFEST_URL !== null) {
     const manifest = await fetchUpdateManifest(UPDATE_MANIFEST_URL)
-    return planUpdates(manifest, { shellVersion, dshVersion, platform: process.platform })
+    return planUpdates(manifest, { shellVersion, dshVersion, platform: process.platform, arch: process.arch })
   }
   const plan = { shell: null, dsh: null }
   const latest = await resolveVersion(REGISTRY, DSH_PACKAGE, DSH_DIST_TAG)
@@ -41,7 +41,9 @@ async function resolvePlan() {
  */
 export function watchForUpdates(window) {
   ipcMain.removeAllListeners('updates:apply')
-  ipcMain.on('updates:apply', () => {
+  ipcMain.on('updates:apply', (event) => {
+    // The pill lives in our own header page; nothing else may drive installs.
+    if (window.isDestroyed() || event.sender !== window.webContents) return
     void checkForUpdates().then(async () => {
       // Deferring ("稍后") keeps the pill; hide it only once nothing is left.
       const plan = await resolvePlan()

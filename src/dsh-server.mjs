@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import path from 'node:path'
+import { DETACHED, killTree } from './child.mjs'
 import { logsDir } from './paths.mjs'
 import { dshEntry, dshEnv, nodeBin } from './runtime.mjs'
 
@@ -10,6 +11,9 @@ import { dshEntry, dshEnv, nodeBin } from './runtime.mjs'
 const URL_LINE = /dsh web: (http:\/\/127\.0\.0\.1:\d+)/
 
 const START_TIMEOUT_MS = 120_000
+
+/** How long a stop waits for the tree to go down on its own before forcing it. */
+const STOP_GRACE_MS = 5_000
 
 /**
  * Start `dsh web --port 0` (OS-assigned port) and resolve with the served URL.
@@ -30,6 +34,8 @@ export function startDshServer(onExit) {
   const child = spawn(nodeBin(), [entry, 'web', '--port', '0', '--no-open'], {
     env: dshEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Own process group, so stopping reaches whatever dsh spawned (killTree).
+    detached: DETACHED,
   })
   child.stderr.pipe(log, { end: false })
 
@@ -40,21 +46,20 @@ export function startDshServer(onExit) {
       resolvePromise()
       return
     }
-    const force = setTimeout(() => child.kill('SIGKILL'), 5_000)
+    const force = setTimeout(() => killTree(child, 'SIGKILL'), STOP_GRACE_MS)
     child.once('exit', () => {
       clearTimeout(force)
       resolvePromise()
     })
-    child.kill('SIGTERM')
-  })
-
-  child.on('exit', (code) => {
-    log.write(`===== dsh web exit ${code} =====\n`)
-    log.end()
-    if (!stopped) onExit({ exitCode: code })
+    killTree(child, 'SIGTERM')
   })
 
   return new Promise((resolvePromise, rejectPromise) => {
+    // Decides which half of the lifecycle an exit belongs to: before the URL
+    // it is a failed start (this promise rejects and the caller reports it),
+    // after it a crash the supervisor should restart. Routing an exit to both
+    // would race the caller's error path against the restart loop.
+    let serving = false
     const timeout = setTimeout(() => {
       rejectPromise(new Error(`dsh web printed no URL within ${START_TIMEOUT_MS / 1000}s — see ${logPath}`))
       void stop()
@@ -63,20 +68,33 @@ export function startDshServer(onExit) {
     let buffered = ''
     child.stdout.on('data', (chunk) => {
       log.write(chunk)
+      // Only the startup banner is scanned. dsh keeps logging for as long as
+      // the app runs, so accumulating past readiness would grow a buffer for
+      // hours and re-run the regex over all of it on every chunk.
+      if (serving) return
       buffered += String(chunk)
       const match = URL_LINE.exec(buffered)
-      if (match !== null) {
-        clearTimeout(timeout)
-        resolvePromise({ url: match[1], stop })
-      }
+      if (match === null) return
+      serving = true
+      buffered = ''
+      clearTimeout(timeout)
+      resolvePromise({ url: match[1], stop })
     })
+
     child.on('error', (error) => {
       clearTimeout(timeout)
-      rejectPromise(error)
+      if (!serving) rejectPromise(error)
     })
+
     child.on('exit', (code) => {
+      log.write(`===== dsh web exit ${code} =====\n`)
+      log.end()
       clearTimeout(timeout)
-      rejectPromise(new Error(`dsh web exited with ${code} before serving — see ${logPath}`))
+      if (!serving) {
+        rejectPromise(new Error(`dsh web exited with ${code} before serving — see ${logPath}`))
+        return
+      }
+      if (!stopped) onExit({ exitCode: code })
     })
   })
 }

@@ -35,9 +35,9 @@ const manifest = manifestFile !== undefined
       },
       ...dshVersion === undefined ? {} : {
         dsh: {
-          version: dshVersion,
           // Curated picker allowlist: the version window should offer exactly
           // this entry (plus locally installed versions) with these notes.
+          // The first entry is also the recommended/pinned version.
           versions: [{ version: dshVersion, notes: '本地测试清单中的版本' }],
         },
       },

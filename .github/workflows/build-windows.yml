@@ -1,0 +1,57 @@
+# Windows 安装包在 GitHub 的 windows-latest 云端机器上产出（Squirrel 的
+# Setup.exe/RELEASES/.nupkg 只能在 Windows 上打；mac 包在本地打，因为签名
+# 公证凭据在本机钥匙串里）。
+#
+# 触发方式：
+#   - push 一个 v* 标签（即发布 release）：打包并把产物直接传到同名 release；
+#   - Actions 页面手动 Run workflow：只打包，产物挂在 run 的 Artifacts 里供下载。
+name: build-windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 云端机器在海外，直连官方源比走国内镜像快。
+      - run: pnpm run bundle-runtime
+        env:
+          NODE_MIRROR: https://nodejs.org/dist
+          DSH_DESKTOP_REGISTRY: https://registry.npmjs.org
+
+      - run: pnpm run make
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: out/make/**
+
+      # 标签触发时把产物传到对应 release（Setup.exe、zip、RELEASES、nupkg）。
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $files = Get-ChildItem "out/make/$version" -File | ForEach-Object { $_.FullName }
+          gh release upload "$env:GITHUB_REF_NAME" @files --clobber

@@ -1,5 +1,45 @@
 node_modules/
 out/
 runtime/
+docs/
 *.log
 .DS_Store
+Thumbs.db
+
+# macOS 拷贝到非 APFS 卷（U 盘、网络盘）时产生的资源叉与索引残留
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes
+
+# 编辑器 / 工具本地状态
+.idea/
+*.swp
+.cache/
+tmp/
+
+# macOS / Apple signing — private keys stay on the build machine
+.env
+.env.*
+*.p12
+*.p8
+*.p7b
+*.cer
+*.cert
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.key
+*.pem
+*.keychain
+*.keychain-db
+certs/
+signing/
+
+# 安装包与公证中间产物：正常产物都在 out/（已忽略），这里兜底手工放到别处的副本
+*.dmg
+*.zip
+*.exe
+*.nupkg
+*.app/
+RELEASES

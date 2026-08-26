@@ -6,13 +6,17 @@ import { ensureDsh, pinUserDataDir, prepareHome, preinstallPlugins } from './boo
 import { dshLogPath, startDshServer } from './dsh-server.mjs'
 import { installAppMenu } from './menu.mjs'
 import { cleanupOldRuntimes } from './runtime.mjs'
+import { handleSquirrelStartup } from './squirrel-startup.mjs'
+import { installTray, notifyHiddenToTray } from './tray.mjs'
 import { watchForUpdates } from './updates.mjs'
 import { installVersionSwitcher } from './versions.mjs'
-import { createMainWindow, createSplash, setAppUrl, setSplashStatus } from './windows.mjs'
+import { createMainWindow, createSplash, setAppUrl, setSplashProgress, setSplashStatus } from './windows.mjs'
 
 pinUserDataDir(USER_DATA_DIR_NAME)
 
-if (!app.requestSingleInstanceLock()) {
+if (handleSquirrelStartup()) {
+  // Squirrel install/update/uninstall launch: shortcuts handled, quitting.
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   run()
@@ -27,20 +31,22 @@ let restartCount = 0
 let currentUrl = null
 
 function run() {
-  app.on('second-instance', () => {
-    if (mainWindow !== null && !mainWindow.isDestroyed()) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
-  })
+  app.on('second-instance', showMainWindow)
 
-  app.on('window-all-closed', () => app.quit())
+  // Tray residency: with the tray as the persistent handle, a closed (hidden)
+  // window must not end the app; only an explicit quit does.
+  app.on('window-all-closed', () => {})
+
+  // mac: clicking the Dock icon brings the hidden window back.
+  app.on('activate', showMainWindow)
 
   app.on('before-quit', (event) => {
-    if (quitting || server === null) return
+    // Flag first: the main window's close handler lets the close through
+    // (instead of hiding) exactly when a real quit is underway.
+    quitting = true
+    if (server === null) return
     // Hold quit until the dsh child (and any pnpm it spawned) is down.
     event.preventDefault()
-    quitting = true
     const pending = server
     server = null
     void pending.stop().finally(() => app.quit())
@@ -49,20 +55,41 @@ function run() {
   void app.whenReady().then(boot)
 }
 
+/** Re-show the main window from the tray, Dock, or a second app launch. */
+function showMainWindow() {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
 async function boot() {
   installAppMenu()
+  // Fixed destination and no payload from the page, so the channel carries no
+  // authority beyond "open our repo".
   ipcMain.on('shell:open-github', () => void shell.openExternal(REPO_URL))
   const splash = createSplash()
+  const status = (text) => setSplashStatus(splash, text)
+  const progress = (percent) => setSplashProgress(splash, percent)
   try {
     await prepareHome()
-    await ensureDsh((status) => setSplashStatus(splash, status))
-    await preinstallPlugins((status) => setSplashStatus(splash, status))
-    setSplashStatus(splash, '正在启动 DeepSeek Harness…')
+    await ensureDsh(status, progress)
+    await preinstallPlugins(status, progress)
+    status('正在启动 DeepSeek Harness…')
     const url = await startServer()
     mainWindow = createMainWindow(url)
     mainWindow.once('ready-to-show', () => {
       if (!splash.isDestroyed()) splash.close()
     })
+    // Close-to-tray: hide instead of destroying, so dsh keeps serving and
+    // reopening is instant. A real quit (tray menu, Cmd+Q) passes through.
+    mainWindow.on('close', (event) => {
+      if (quitting) return
+      event.preventDefault()
+      mainWindow.hide()
+      notifyHiddenToTray()
+    })
+    installTray(showMainWindow)
     watchForUpdates(mainWindow)
     installVersionSwitcher(mainWindow, restartServer, () => currentUrl)
     void cleanupOldRuntimes().catch(() => {})

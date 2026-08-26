@@ -8,12 +8,32 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DETACHED, killTree } from './child.mjs'
 
 /** Path of dsh's entry inside an install directory. */
 export const DSH_BIN_RELATIVE = path.join('node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 
 /** Marker written after a fully successful install; absence means half-installed garbage. */
 const READY_MARKER = '.ready'
+
+/**
+ * Abandon an install that has gone quiet for this long. Deliberately an idle
+ * timeout rather than a total one: pnpm streams progress lines throughout, so
+ * silence means wedged (a dead mirror connection that never times out), while
+ * a slow-but-working download of a few hundred MB must not be cut off.
+ */
+const IDLE_TIMEOUT_MS = 180_000
+
+/**
+ * Whether a value is shaped like a version we could have installed:
+ * `major.minor.patch` with an optional prerelease tail. Every install lives at
+ * `<runtimesRoot>/<version>`, so this is the gate for version strings that
+ * arrive from outside (IPC) before they are joined into a path or handed to
+ * pnpm — path separators and `..` segments never pass.
+ */
+export function isVersionName(value) {
+  return typeof value === 'string' && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value)
+}
 
 /** Compare dotted prerelease versions ("0.1.0-rc.7"); release > its prereleases. */
 export function compareVersions(a, b) {
@@ -65,6 +85,22 @@ export async function fetchVersionCatalog(registry, packageName, timeoutMs = 10_
     version: entry.version,
     publishedAt: metadata.time?.[entry.version] ?? null,
   }))
+}
+
+/**
+ * Extract an install percentage from pnpm's progress reporter lines
+ * ("Progress: resolved N, reused N, downloaded N, added N"), or null when a
+ * chunk carries none — callers then keep whatever they were showing.
+ * Capped below 100 so the bar never claims completion before pnpm exits.
+ */
+export function parsePnpmPercent(chunk) {
+  const matches = chunk.match(/resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)/g)
+  if (matches === null) return null
+  const [, resolved, reused, downloaded, added] = /resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)/
+    .exec(matches[matches.length - 1])
+    .map(Number)
+  if (resolved === 0) return null
+  return Math.min(99, Math.round((Math.max(reused + downloaded, added) / resolved) * 100))
 }
 
 /** On-disk size marker, written beside .ready after the first measurement. */
@@ -133,21 +169,47 @@ export async function installDsh({ runtimesRoot, packageName, version, registry,
   await writeFile(path.join(dir, '.npmrc'), `registry=${registry}\nnode-linker=hoisted\n`)
 
   const pnpm = path.join(pnpmShimDir, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+  let timedOut = false
   const exitCode = await new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(pnpm, ['add', `${packageName}@${version}`, '--dangerously-allow-all-builds'], {
       cwd: dir,
       shell: process.platform === 'win32',
       env: { ...process.env, PATH: `${nodeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Own process group: pnpm spawns node for lifecycle scripts, and the
+      // idle timeout below has to take those down with it.
+      detached: DETACHED,
     })
-    const forward = (chunk) => onOutput?.(String(chunk))
+    // A wedged pnpm would otherwise hold the splash screen forever, with no
+    // way out but force-quitting the app.
+    let idle = null
+    const armIdleTimer = () => {
+      clearTimeout(idle)
+      idle = setTimeout(() => {
+        timedOut = true
+        onOutput?.(`\n[timeout] pnpm 静默超过 ${IDLE_TIMEOUT_MS / 1000}s，已终止\n`)
+        killTree(child, 'SIGKILL')
+      }, IDLE_TIMEOUT_MS)
+    }
+    const forward = (chunk) => {
+      armIdleTimer()
+      onOutput?.(String(chunk))
+    }
+    armIdleTimer()
     child.stdout.on('data', forward)
     child.stderr.on('data', forward)
-    child.on('error', rejectPromise)
-    child.on('exit', (code) => resolvePromise(code ?? -1))
+    child.on('error', (error) => {
+      clearTimeout(idle)
+      rejectPromise(error)
+    })
+    child.on('exit', (code) => {
+      clearTimeout(idle)
+      resolvePromise(code ?? -1)
+    })
   })
   if (exitCode !== 0) {
     await rm(dir, { recursive: true, force: true })
+    if (timedOut) throw new Error(`dsh 安装超时：pnpm 静默超过 ${IDLE_TIMEOUT_MS / 1000}s，请检查网络后重试`)
     throw new Error(`dsh 安装失败（pnpm 退出码 ${exitCode}）`)
   }
   await writeFile(path.join(dir, READY_MARKER), new Date().toISOString())

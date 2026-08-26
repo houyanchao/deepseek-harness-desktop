@@ -8,16 +8,23 @@
  *   {
  *     "shell": {
  *       "version": "0.2.0",
- *       "mac": "<dmg url>",            // manual download page (fallback)
+ *       "macArm64": "<dmg url>",       // per-chip direct links: mac ships two
+ *       "macX64": "<dmg url>",         // builds (Apple Silicon / Intel)
  *       "win": "<setup exe url>",
- *       "macFeed": "<squirrel json url>",  // auto-update feed: JSON {"url": "<zip url>"}
- *       "winFeed": "<squirrel dir url>"    // auto-update feed: dir with RELEASES + .nupkg
+ *       // Auto-update feeds. mac: per-chip Squirrel.Mac JSONs, each shaped
+ *       // {"url": "<that chip's zip url>"} (the protocol takes exactly one
+ *       // url, so the chips cannot share a feed). win: a Squirrel.Windows
+ *       // directory holding RELEASES + .nupkg.
+ *       "macFeedArm64": "<squirrel json url>",
+ *       "macFeedX64": "<squirrel json url>",
+ *       "winFeed": "<squirrel dir url>"
  *     },
  *     "dsh": {
- *       "version": "0.1.0-rc.8",
- *       // Optional hand-curated allowlist for the version picker: only
- *       // locally-verified releases go here. Entries are a version string
- *       // or an object carrying at least { version }.
+ *       // Hand-curated allowlist, newest-first: only locally-verified
+ *       // releases go here. The FIRST entry is the recommended version —
+ *       // it is what a fresh install gets and what update checks target.
+ *       // Entries are a version string or an object carrying at least
+ *       // { version }.
  *       "versions": ["0.1.0-rc.8", "0.1.0-rc.7"],
  *       // Optional plugins every desktop install should start with; they are
  *       // preinstalled on first boot before dsh is ever started. Entries are
@@ -42,7 +49,7 @@ const FETCH_TIMEOUT_MS = 10_000
  * and, as a transition until real hosting exists, file: URLs pointing at a
  * manifest bundled with the app (Node's fetch does not speak file:).
  * @param {string} url the manifest address.
- * @returns {Promise<{ shell?: { version: string, mac?: string, win?: string }, dsh?: { version: string } }>}
+ * @returns {Promise<{ shell?: { version: string, mac?: string, win?: string }, dsh?: { versions?: unknown[] } }>}
  */
 export async function fetchUpdateManifest(url) {
   let manifest
@@ -53,11 +60,8 @@ export async function fetchUpdateManifest(url) {
     if (!response.ok) throw new Error(`更新清单获取失败：GET ${url} → ${response.status}`)
     manifest = await response.json()
   }
-  for (const channel of ['shell', 'dsh']) {
-    const entry = manifest[channel]
-    if (entry !== undefined && typeof entry.version !== 'string') {
-      throw new Error(`更新清单格式错误：${channel}.version 缺失或不是字符串`)
-    }
+  if (manifest.shell !== undefined && typeof manifest.shell.version !== 'string') {
+    throw new Error('更新清单格式错误：shell.version 缺失或不是字符串')
   }
   const versions = manifest.dsh?.versions
   if (versions !== undefined) {
@@ -96,6 +100,18 @@ export function curatedDshVersions(manifest) {
 }
 
 /**
+ * The dsh version the manifest recommends: the first (newest) entry of the
+ * curated list. There is deliberately no separate "version" field — the list
+ * is the single source of truth, so it can never disagree with itself.
+ * @param {object} manifest a validated manifest.
+ * @returns {string | null} null when the manifest curates nothing.
+ */
+export function recommendedDshVersion(manifest) {
+  const versions = curatedDshVersions(manifest)
+  return versions === null || versions.length === 0 ? null : versions[0]
+}
+
+/**
  * The plugins a fresh install should start with. Name and install spec are
  * kept apart on purpose: presence is checked by package name, and deriving one
  * from a `pkg@version` spec is ambiguous for scoped packages.
@@ -117,21 +133,27 @@ export function curatedPlugins(manifest) {
  * Pure so it can be unit-tested without network or Electron.
  *
  * @param {object} manifest a validated manifest.
- * @param {{ shellVersion: string, dshVersion: string | null, platform: string }} current
+ * @param {{ shellVersion: string, dshVersion: string | null, platform: string, arch?: string }} current
  * @returns {{ shell: { version: string, url: string | undefined, feed: string | undefined } | null, dsh: { version: string } | null }}
  */
-export function planUpdates(manifest, { shellVersion, dshVersion, platform }) {
+export function planUpdates(manifest, { shellVersion, dshVersion, platform, arch }) {
   let shell = null
   if (manifest.shell !== undefined && compareVersions(manifest.shell.version, shellVersion) > 0) {
+    // Mac links and feeds are strictly per-chip (two builds exist: Apple
+    // Silicon and Intel; swapping in the wrong one bricks the install). A
+    // missing url means no download button; a missing feed means the silent
+    // Squirrel channel is skipped and the manual dialog handles it.
+    const arm = arch === 'arm64'
     shell = {
       version: manifest.shell.version,
-      url: platform === 'win32' ? manifest.shell.win : manifest.shell.mac,
-      feed: platform === 'win32' ? manifest.shell.winFeed : manifest.shell.macFeed,
+      url: platform === 'win32' ? manifest.shell.win : (arm ? manifest.shell.macArm64 : manifest.shell.macX64),
+      feed: platform === 'win32' ? manifest.shell.winFeed : (arm ? manifest.shell.macFeedArm64 : manifest.shell.macFeedX64),
     }
   }
   let dsh = null
-  if (manifest.dsh !== undefined && (dshVersion === null || compareVersions(manifest.dsh.version, dshVersion) > 0)) {
-    dsh = { version: manifest.dsh.version }
+  const recommended = recommendedDshVersion(manifest)
+  if (recommended !== null && (dshVersion === null || compareVersions(recommended, dshVersion) > 0)) {
+    dsh = { version: recommended }
   }
   return { shell, dsh }
 }

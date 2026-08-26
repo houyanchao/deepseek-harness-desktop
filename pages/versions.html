@@ -22,16 +22,43 @@
   html { scrollbar-gutter: stable; }
   body { padding-bottom: 76px; }
 
-  /* Summary header: stays put while the list scrolls under it. */
+  /* Summary header: stays put while the list scrolls under it. The window is
+   * frameless, so the header doubles as the drag handle and hosts the single
+   * close button. */
   #head {
     position: sticky;
     top: 0;
     z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 13px 16px 11px;
     background: rgba(245, 246, 248, 0.86);
     backdrop-filter: saturate(180%) blur(12px);
     border-bottom: 1px solid var(--line);
+    -webkit-app-region: drag;
   }
+  #close {
+    -webkit-app-region: no-drag;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-radius: 50%;
+    background: #ff5f57;
+    color: transparent;
+    font: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+  #close:hover { color: rgba(77, 0, 0, 0.75); }
+  #close:active { background: #e0443e; }
   #head-current { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
   #head-current .dim { margin-right: 7px; color: var(--ink-3); font-weight: 400; }
 
@@ -167,8 +194,10 @@
     cursor: default;
     transform: none;
   }
-  /* The running version reads as a healthy state, not as a dead button. */
-  .row.is-current button:disabled { color: rgb(18, 140, 76); font-weight: 500; }
+  /* The running version reads as a healthy state, not as a dead button.
+   * Scoped to the status pill so the restart button beside it still greys
+   * out normally while a switch is in flight. */
+  .row.is-current button.status:disabled { color: rgb(18, 140, 76); font-weight: 500; }
   /* Destructive secondary action: quiet until hovered. */
   .row button.ghost {
     padding: 0 10px;
@@ -177,6 +206,11 @@
   }
   .row button.ghost:hover { background: #fdeceb; color: #c73a2e; }
   .row button.ghost:disabled { background: transparent; color: #ccd0d6; }
+  /* Non-destructive secondary action: tinted so it still reads as a button,
+   * but never louder than the 切换 buttons it sits among. */
+  .row button.subtle { background: #eef0f3; color: var(--ink-2); }
+  .row button.subtle:hover { background: #e3e6ea; color: var(--ink); }
+  .row button.subtle:disabled { background: #f4f5f7; color: #ccd0d6; }
 
   /* Loading skeleton, replaced by real cards when the catalog arrives. */
   .skeleton { pointer-events: none; }
@@ -257,6 +291,7 @@
 </head>
 <body>
   <div id="head">
+    <button id="close" title="关闭" aria-label="关闭">×</button>
     <span id="head-current"></span>
   </div>
   <div id="notice"></div>

@@ -1,6 +1,6 @@
 /** Locate the bundled node/pnpm and pick the installed dsh version to boot. */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { compareVersions, DSH_BIN_RELATIVE, isInstalled } from './dsh-install.mjs'
@@ -45,9 +45,22 @@ export function activeDshVersion() {
   return versions.at(-1) ?? null
 }
 
-/** Record the version to boot from now on; the next (re)start activates it. */
+/**
+ * Record the version to boot from now on; the next (re)start activates it.
+ * Written to a temp file and renamed over the pin: a crash between the two
+ * leaves the previous pin intact, where a partial direct write could leave a
+ * garbage version name that matches no install (silently booting the newest).
+ */
 export function pinDshVersion(version) {
-  writeFileSync(path.join(installedRuntimesDir(), PIN_FILE), `${version}\n`)
+  const pinFile = path.join(installedRuntimesDir(), PIN_FILE)
+  const temp = `${pinFile}.tmp`
+  try {
+    writeFileSync(temp, `${version}\n`)
+    renameSync(temp, pinFile)
+  } catch (error) {
+    rmSync(temp, { force: true })
+    throw error
+  }
 }
 
 /**

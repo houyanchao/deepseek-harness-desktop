@@ -34,6 +34,19 @@ export function setSplashStatus(splash, text) {
 }
 
 /**
+ * Drive the splash progress bar: a percentage fills it, null hides it again
+ * so an indeterminate phase doesn't leave a stale number on screen. Tolerates
+ * being called before the page's script ran (the bar simply stays hidden).
+ * @param {number | null} percent
+ */
+export function setSplashProgress(splash, percent) {
+  if (splash.isDestroyed()) return
+  void splash.webContents.executeJavaScript(
+    `window.setProgress?.(${percent === null ? 'null' : percent})`,
+  ).catch(() => {})
+}
+
+/**
  * The main window is the shell's own header page (drag region, update pill,
  * future buttons); the dsh GUI loads in a WebContentsView laid out below the
  * header, so removing the native title bar costs no page real estate.
@@ -48,8 +61,14 @@ export function createMainWindow(url) {
     title: '',
     // 'hiddenInset' sinks the traffic lights to vertically center in the 36px header.
     ...process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' } : {},
+    // Spelled out rather than inherited: these are Electron's defaults today,
+    // and a major-version change of them must not silently widen the window
+    // that hosts our preload.
     webPreferences: {
       preload: path.join(path.dirname(fileURLToPath(import.meta.url)), 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
   })
   void window.loadFile(path.join(PAGES, 'chrome.html'), { query: { platform: process.platform } })

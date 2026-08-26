@@ -17,8 +17,8 @@ A desktop client built for [DeepSeek Harness](https://deepseek-harness.github.io
 
 Download the installer for your platform from [Releases](https://github.com/houyanchao/deepseek-harness-desktop/releases):
 
-- macOS (Apple Silicon): `DSH Desktop-<version>-arm64.dmg`
-- Windows: `DSH-Setup.exe`
+- macOS (Apple Silicon): `DSH_<version>_darwin_arm64.dmg`
+- Windows: `DSH_<version>_win32_x64.exe`
 
 The first launch needs network access (to download DSH itself); after that the app works offline.
 

@@ -13,16 +13,26 @@ export const DSH_PACKAGE = '@deepseek-ai/dsh'
 export const DSH_DIST_TAG = 'latest'
 
 /**
+ * Where the hosted update-manifest.json lives (Qiniu). The repo's update/
+ * directory is the master copy of everything hosted there (manifest + the
+ * Squirrel.Mac feed JSONs): edit files there, upload them to Qiniu, then
+ * refresh the CDN cache in the Qiniu console.
+ */
+const HOSTED_MANIFEST_URL = 'https://image.bushishier.com/dshdesktop/update-manifest.json'
+
+/**
  * The unified update manifest driving both channels (shell installer version
  * + pinned dsh version + the picker's curated version allowlist).
  *
- * Transition state: it points at update-manifest.json bundled with the app,
- * so the curation gate works today — but a bundled manifest is frozen at
- * package time (no remote brake/rollback, edits need a repackage). Once the
- * file moves to static hosting, replace this with its https address.
+ * Resolution order: explicit env override → hosted address (remote brake:
+ * edits take effect without repackaging) → the manifest bundled with the app.
+ * Every consumer already degrades when the address is unreachable (registry
+ * fallback / skip / fail-closed picker), so a hosting outage never blocks
+ * startup.
  */
 export const UPDATE_MANIFEST_URL = process.env.DSH_DESKTOP_MANIFEST
-  ?? new URL('../update-manifest.json', import.meta.url).href
+  ?? HOSTED_MANIFEST_URL
+  ?? new URL('../update/update-manifest.json', import.meta.url).href
 
 /**
  * Registry used for the profile's .npmrc (plugin installs) and the staging

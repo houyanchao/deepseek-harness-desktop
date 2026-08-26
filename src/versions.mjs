@@ -6,7 +6,8 @@
  * the dsh child in place; downloads stay side by side (see
  * cleanupOldRuntimes' retention policy) so switching back is instant and
  * offline-safe, and a version that fails to boot rolls back automatically.
- * Idle downloads can be removed by hand to reclaim disk space.
+ * Idle downloads can be removed by hand to reclaim disk space, and the
+ * running one can be restarted in place.
  */
 
 import { createWriteStream } from 'node:fs'
@@ -15,7 +16,15 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { DSH_PACKAGE, REGISTRY, UPDATE_MANIFEST_URL } from './config.mjs'
-import { compareVersions, fetchVersionCatalog, installDsh, installedSize, isInstalled } from './dsh-install.mjs'
+import {
+  compareVersions,
+  fetchVersionCatalog,
+  installDsh,
+  installedSize,
+  isInstalled,
+  isVersionName,
+  parsePnpmPercent,
+} from './dsh-install.mjs'
 import { installedRuntimesDir, logsDir } from './paths.mjs'
 import { curatedDshVersions, fetchUpdateManifest } from './update-manifest.mjs'
 import { activeDshVersion, installedDshVersions, nodeBin, pinDshVersion, pnpmShimDir } from './runtime.mjs'
@@ -49,15 +58,73 @@ export function installVersionSwitcher(window, restartServer, appUrl) {
   window.webContents.on('did-finish-load', sendCurrent)
 
   ipcMain.removeAllListeners('versions:open')
-  ipcMain.on('versions:open', () => openVersionsWindow(window))
+  ipcMain.on('versions:open', (event) => {
+    if (!isFrom(event, window)) return
+    openVersionsWindow(window)
+  })
   ipcMain.removeAllListeners('versions:switch')
   // The picker stays open during the switch: it renders the download/start
   // progress itself; on success it closes and a toast confirms.
-  ipcMain.on('versions:switch', (_event, version) => {
+  ipcMain.on('versions:switch', (event, version) => {
+    if (!fromPicker(event, version)) return
     void switchTo(window, version, () => restartServer().then(sendCurrent))
   })
   ipcMain.removeAllListeners('versions:remove')
-  ipcMain.on('versions:remove', (_event, version) => void removeVersion(window, version))
+  ipcMain.on('versions:remove', (event, version) => {
+    if (!fromPicker(event, version)) return
+    void removeVersion(window, version)
+  })
+  ipcMain.removeAllListeners('versions:restart')
+  ipcMain.on('versions:restart', (event) => {
+    if (!isFrom(event, versionsWindow)) return
+    void restartCurrent(window, () => restartServer().then(sendCurrent))
+  })
+}
+
+/**
+ * Whether a message came from the shell page we wired the channel for. These
+ * channels drive installs and deletions, so they answer only to our own
+ * chrome — never to the dsh GUI (which has no preload today, but must not
+ * become a path to them if it ever gains one).
+ * @param {import('electron').IpcMainEvent} event
+ * @param {import('electron').BrowserWindow | null} expected
+ */
+function isFrom(event, expected) {
+  return expected !== null && !expected.isDestroyed() && event.sender === expected.webContents
+}
+
+/**
+ * Guard for the picker's version-scoped channels: right sender, and a version
+ * string that cannot escape the runtimes directory once joined into a path.
+ * @param {import('electron').IpcMainEvent} event
+ * @param {unknown} version
+ */
+function fromPicker(event, version) {
+  return isFrom(event, versionsWindow) && isVersionName(version)
+}
+
+/**
+ * Restart the dsh child on the version already pinned — the escape hatch for
+ * a wedged server, without the download/rollback machinery of a switch. The
+ * child gets a fresh port, so the picker closes rather than showing a stale
+ * one, and a toast confirms.
+ */
+async function restartCurrent(window, restartAndRefresh) {
+  const version = activeDshVersion()
+  if (switching || version === null) return
+  switching = true
+  try {
+    sendProgress({ phase: 'restarting', version })
+    await restartAndRefresh()
+    if (versionsWindow !== null && !versionsWindow.isDestroyed()) versionsWindow.close()
+    if (!window.isDestroyed()) showToast(window, `已重启 DeepSeek Harness ${version}`)
+  } catch (error) {
+    sendProgress({ phase: 'error' })
+    dialog.showErrorBox('重启失败', error instanceof Error ? error.message : String(error))
+  } finally {
+    switching = false
+    void sendCatalog().catch(() => {})
+  }
 }
 
 /** Matches the row-out animation in pages/versions.html. */
@@ -113,10 +180,21 @@ function openVersionsWindow(parent) {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
+    // No system title bar: even disabled, the mac traffic-light trio reads as
+    // three actions on a window that only supports one. The page draws its own
+    // single close button and drags by its header instead.
+    frame: false,
     show: false,
     title: 'DeepSeek Harness 版本列表',
     backgroundColor: '#f5f6f8',
-    webPreferences: { preload: path.join(APP_ROOT, 'src', 'versions-preload.cjs') },
+    // Spelled out rather than inherited: these are Electron's defaults today,
+    // and a major-version change of them must not silently widen this window.
+    webPreferences: {
+      preload: path.join(APP_ROOT, 'src', 'versions-preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
   })
   versionsWindow.setMenuBarVisibility(false)
   versionsWindow.on('closed', () => {
@@ -204,21 +282,6 @@ async function sendCatalog() {
 function sendProgress(payload) {
   if (versionsWindow === null || versionsWindow.isDestroyed()) return
   versionsWindow.webContents.send('versions:progress', payload)
-}
-
-/**
- * Extract an install percentage from pnpm's progress reporter lines
- * ("Progress: resolved N, reused N, downloaded N, added N"), or null when a
- * chunk carries none — the picker then keeps its indeterminate bar.
- */
-function parsePnpmPercent(chunk) {
-  const matches = chunk.match(/resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)/g)
-  if (matches === null) return null
-  const [, resolved, reused, downloaded, added] = /resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)/
-    .exec(matches[matches.length - 1])
-    .map(Number)
-  if (resolved === 0) return null
-  return Math.min(99, Math.round((Math.max(reused + downloaded, added) / resolved) * 100))
 }
 
 /**

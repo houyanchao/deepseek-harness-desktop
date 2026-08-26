@@ -1,12 +1,14 @@
 /**
  * Rasterize assets/icon.svg into the platform icon files electron-packager
- * consumes: assets/icon.icns (mac) and assets/icon.ico (win).
+ * consumes — assets/icon.icns (mac) and assets/icon.ico (win) — plus
+ * assets/tray.svg into the macOS menu-bar template images
+ * trayTemplate.png / trayTemplate@2x.png (the Windows tray reuses icon.ico).
  *
  *   node scripts/build-icons.mjs
  *
  * macOS-only (uses the built-in sips/iconutil), which is fine: the icons are
  * committed, so packaging on other platforms just reuses them. Re-run after
- * editing the SVG.
+ * editing either SVG.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -16,6 +18,7 @@ import path from 'node:path'
 
 const ASSETS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets')
 const SVG = path.join(ASSETS, 'icon.svg')
+const TRAY_SVG = path.join(ASSETS, 'tray.svg')
 const WORK = path.join(ASSETS, '.build')
 
 /** Apple's iconset expects both @1x and @2x of each nominal size. */
@@ -35,12 +38,13 @@ const ICNS_ENTRIES = [
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 if (!existsSync(SVG)) throw new Error(`missing icon source: ${SVG}`)
+if (!existsSync(TRAY_SVG)) throw new Error(`missing tray icon source: ${TRAY_SVG}`)
 rmSync(WORK, { recursive: true, force: true })
 mkdirSync(WORK, { recursive: true })
 
-/** Rasterize the SVG at one square size; sips reads SVG via ImageIO. */
-function render(size, target) {
-  execFileSync('sips', ['-s', 'format', 'png', '--resampleHeightWidth', String(size), String(size), SVG, '--out', target], {
+/** Rasterize an SVG at one square size; sips reads SVG via ImageIO. */
+function render(size, target, source = SVG) {
+  execFileSync('sips', ['-s', 'format', 'png', '--resampleHeightWidth', String(size), String(size), source, '--out', target], {
     stdio: 'ignore',
   })
   return target
@@ -74,5 +78,11 @@ images.forEach((image, index) => {
 })
 writeFileSync(path.join(ASSETS, 'icon.ico'), Buffer.concat([header, directory, ...images.map((image) => image.data)]))
 
+// Menu-bar tray icon: 16pt template image (black + alpha), @1x and @2x. The
+// "Template" filename suffix makes Electron mark it a template image, so
+// macOS recolors it to match light/dark menu bars.
+render(16, path.join(ASSETS, 'trayTemplate.png'), TRAY_SVG)
+render(32, path.join(ASSETS, 'trayTemplate@2x.png'), TRAY_SVG)
+
 rmSync(WORK, { recursive: true, force: true })
-console.log(`icons written: ${path.join(ASSETS, 'icon.icns')}, ${path.join(ASSETS, 'icon.ico')}`)
+console.log(`icons written: ${path.join(ASSETS, 'icon.icns')}, ${path.join(ASSETS, 'icon.ico')}, ${path.join(ASSETS, 'trayTemplate.png')} (+@2x)`)
