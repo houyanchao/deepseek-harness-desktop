@@ -32,6 +32,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # pnpm 默认不跑依赖的 install 脚本；electron-winstaller 靠 postinstall
+      # 选对架构的 7z.exe，缺了它 Squirrel 会在 CreateZipFromDirectory 报
+      # "The system cannot find the file specified"。onlyBuiltDependencies 已
+      # 列入，这里再 rebuild 一次兜底（已装过但脚本被跳过的情况）。
+      - run: pnpm rebuild electron-winstaller
+
       # 云端机器在海外，直连官方源比走国内镜像快。
       - run: pnpm run bundle-runtime
         env:
@@ -39,6 +45,9 @@ jobs:
           DSH_DESKTOP_REGISTRY: https://registry.npmjs.org
 
       - run: pnpm run make
+        env:
+          # Squirrel 默认写 %AppData%\SquirrelTemp，CI 账号偶发无权限。
+          SQUIRREL_TEMP: ${{ github.workspace }}\SquirrelTemp
 
       - uses: actions/upload-artifact@v4
         with:
