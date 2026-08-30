@@ -24,18 +24,33 @@ export const DETACHED = process.platform !== 'win32'
  */
 export function killTree(child, signal) {
   if (child.pid === undefined || child.exitCode !== null) return
+  // Windows has no graceful tree signal: the asking pass reaches the child
+  // alone, and the forcing pass hands the whole tree to taskkill.
+  if (process.platform === 'win32' && signal === 'SIGTERM') child.kill()
+  else killTreeByPid(child.pid, signal)
+}
+
+/**
+ * Terminate a process tree by pid alone — the orphan case, where the run that
+ * spawned it is gone and no ChildProcess handle survives to signal.
+ *
+ * @param {number} pid the group leader (POSIX) or tree root (Windows).
+ * @param {'SIGTERM' | 'SIGKILL'} signal SIGTERM asks, SIGKILL forces.
+ */
+export function killTreeByPid(pid, signal) {
   if (process.platform === 'win32') {
-    // Windows has no graceful tree signal: the asking pass reaches the child
-    // alone, and the forcing pass hands the whole tree to taskkill.
-    if (signal === 'SIGTERM') child.kill()
-    else spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
     return
   }
   try {
-    process.kill(-child.pid, signal)
+    process.kill(-pid, signal)
   } catch {
-    // The group is already gone (or the child was never detached); the direct
-    // child is the best that can still be reached.
-    child.kill(signal)
+    // The group is already gone (or the process was never detached); the
+    // process itself is the best that can still be reached.
+    try {
+      process.kill(pid, signal)
+    } catch {
+      // Already exited between the check and the signal.
+    }
   }
 }

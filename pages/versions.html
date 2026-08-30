@@ -59,8 +59,7 @@
   }
   #close:hover { color: rgba(77, 0, 0, 0.75); }
   #close:active { background: #e0443e; }
-  #head-current { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  #head-current .dim { margin-right: 7px; color: var(--ink-3); font-weight: 400; }
+  #head-title { font-size: 13px; font-weight: 600; }
 
   #notice {
     display: none;
@@ -100,9 +99,9 @@
     border-color: #d3d7dd;
     box-shadow: 0 2px 8px rgba(15, 17, 21, 0.06);
   }
-  /* The version in use, and the one being switched to, get an accent edge. */
+  /* The version in use is marked by its badge alone; only the one being
+   * switched to gets an accent edge, as transient progress feedback. */
   .row.is-current { border-color: #d8dbe1; }
-  .row.is-current::before,
   .row.switching-target::before {
     content: "";
     position: absolute;
@@ -292,7 +291,7 @@
 <body>
   <div id="head">
     <button id="close" title="关闭" aria-label="关闭">×</button>
-    <span id="head-current"></span>
+    <span id="head-title">DeepSeek Harness 版本列表</span>
   </div>
   <div id="notice"></div>
   <div id="list">

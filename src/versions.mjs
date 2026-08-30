@@ -221,7 +221,12 @@ async function sendCatalog() {
   const [curated, registry, sizePairs] = await Promise.all([
     UPDATE_MANIFEST_URL === null
       ? null
-      : fetchUpdateManifest(UPDATE_MANIFEST_URL).then(curatedDshVersions).catch(() => undefined),
+      : fetchUpdateManifest(UPDATE_MANIFEST_URL).then(curatedDshVersions).catch((error) => {
+          // Fail closed (curation must not silently open up), but leave a trace
+          // for diagnosing the picker's "无法获取版本清单" notice.
+          console.error(`[versions] 清单拉取失败（${UPDATE_MANIFEST_URL}）：`, error)
+          return undefined
+        }),
     fetchVersionCatalog(REGISTRY, DSH_PACKAGE).catch(() => null),
     // Real on-disk sizes; slow only the first time per version (then cached
     // in a .size marker), while the page shows its loading state.

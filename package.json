@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop",
   "productName": "DSH",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop client for DeepSeek Harness (DSH): bundles Node + pnpm, zero configuration, with effortless switching between DSH versions.",
   "license": "GPL-3.0-only",
   "author": "houyanchao",

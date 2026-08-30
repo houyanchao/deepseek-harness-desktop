@@ -1,9 +1,9 @@
 {
   "shell": {
-    "version": "1.0.0",
-    "macArm64": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.0/DSH_1.0.0_darwin_arm64.dmg",
-    "macX64": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.0/DSH_1.0.0_darwin_x64.dmg",
-    "win": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.0/DSH_1.0.0_win32_x64.exe",
+    "version": "1.0.1",
+    "macArm64": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.1/DSH_1.0.1_darwin_arm64.dmg",
+    "macX64": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.1/DSH_1.0.1_darwin_x64.dmg",
+    "win": "https://github.com/houyanchao/deepseek-harness-desktop/releases/download/v1.0.1/DSH_1.0.1_win32_x64.exe",
     "macFeedArm64": "https://image.bushishier.com/dshdesktop/feed-arm64.json",
     "macFeedX64": "https://image.bushishier.com/dshdesktop/feed-x64.json",
     "winFeed": "https://github.com/houyanchao/deepseek-harness-desktop/releases/latest/download"

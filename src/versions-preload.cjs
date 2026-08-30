@@ -92,18 +92,7 @@ function buildRow(entry, current, estimate, index, animate, port) {
 /** Only the first paint (which replaces the skeleton) animates its rows in. */
 let painted = false
 
-/** Header summary: which version is running. */
-function renderHead(data) {
-  const head = document.getElementById('head-current')
-  head.textContent = ''
-  const label = document.createElement('span')
-  label.className = 'dim'
-  label.textContent = '当前版本'
-  head.append(label, document.createTextNode(data.current ?? '未安装'))
-}
-
 ipcRenderer.on('versions:data', (_event, data) => {
-  renderHead(data)
   const notice = document.getElementById('notice')
   notice.textContent = data.notice ?? ''
   notice.classList.toggle('show', data.notice !== null)
